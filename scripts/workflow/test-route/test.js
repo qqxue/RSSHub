@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable no-await-in-loop */
 
 module.exports = async ({ github, context, core, got }, baseUrl, routes, number) => {
     if (routes[0] === 'NOROUTE') {
@@ -11,20 +11,31 @@ module.exports = async ({ github, context, core, got }, baseUrl, routes, number)
     });
 
     let com_l = [];
-    let com = `Successfully [generated](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) as following:\n`;
+    let com = `Successfully [generated](${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) as following:\n`;
 
     for (const lks of links) {
         core.info(`testing route:  ${lks}`);
         // Intended, one at a time
         let success = false;
-        let detail = 'no detail';
+        let detail;
         try {
+            // TODO: change me when https://github.com/actions/github-script is run on node20
+            // const res = await fetch(lks);
+            // if (!res.ok) {
+            //     throw res;
+            // }
+            // success = true;
+            // detail = (await res.text()).replace(/\s+(\n|$)/g, '\n');
             const res = await got(lks);
             if (res && res.body) {
                 success = true;
                 detail = res.body.replace(/\s+(\n|$)/g, '\n');
             }
         } catch (err) {
+            // TODO: change me when https://github.com/actions/github-script is run on node20
+            // detail = `HTTPError: Response code ${err.status} (${err.statusText})`;
+            // const res = await err.text();
+            // const errInfoList = err.body && res.match(/(?<=<pre class="message">)(.+?)(?=<\/pre>)/gs);
             detail = err.toString();
             const errInfoList = err.response && err.response.body && err.response.body.match(/(?<=<pre class="message">)(.+?)(?=<\/pre>)/gs);
             if (errInfoList) {
@@ -38,7 +49,7 @@ module.exports = async ({ github, context, core, got }, baseUrl, routes, number)
 
         let temp_com = `
 <details>
-<summary><a href="${lks}">${lks}</a> - ${success ? 'Success' : '<b>Failed</b>'}</summary>
+<summary><a href="${lks}">${lks}</a> - ${success ? 'Success ✔️' : '<b>Failed ❌</b>'}</summary>
 
 \`\`\`${success ? 'rss' : ''}`;
         temp_com += `
@@ -63,16 +74,18 @@ ${detail.slice(0, 65300 - temp_com.length)}
         com_l = com_l.slice(0, 5);
     }
 
-    await github.rest.issues
-        .addLabels({
-            issue_number: number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            labels: ['Auto: Route Test Complete'],
-        })
-        .catch((e) => {
-            core.warning(e);
-        });
+    if (process.env.PULL_REQUEST) {
+        await github.rest.issues
+            .addLabels({
+                issue_number: number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['Auto: Route Test Complete'],
+            })
+            .catch((e) => {
+                core.warning(e);
+            });
+    }
 
     for (const com_s of com_l) {
         // Intended, one at a time
